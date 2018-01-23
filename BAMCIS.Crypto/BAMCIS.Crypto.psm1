@@ -230,10 +230,66 @@ Function ConvertFrom-CertificatePEM {
 
 Function ConvertFrom-PEM {
 	<#
-		
+		.SYNOPSIS
+			Creates an RSACryptoServiceProvider from PEM encoded input.
+
+		.DESCRIPTION
+			This cmdlet accepts an input PEM file or the string contents of a PEM file and converts
+			them to the appropriate type of RSA Key as an RSACryptoServiceProvider object. You can supply
+			text or files that contain a single key with the following formats:
+
+			PUBLIC KEY
+			RSA PUBLIC KEY
+			PRIVATE KEY
+			RSA PRIVATE KEY
+
+			For the generic PUBLIC and PRIVATE key options, the key must be identified as an RSA private key
+			through its OID.
+
+		.PARAMETER PEM
+			The contents of a PEM encoded file with the appropriate Header and Footer text (that is not base64 encoded), such as
+			-----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY-----
+
+			The string can only contain a single key.
+
+		.PARAMETER Path
+			The path to a properly encoded PEM file with the appropriate Header and Footer text.
+
+			The file can only contain a single key, subsequent keys in the same file will be ignored.
+
+		.EXAMPLE
+			[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = ConvertFrom-PEM -Path c:\myprivatekey.pem
+
+			This creates an RSA key from the provided PEM file.
+
+		.EXAMPLE
+			$PublicKey = @"
+			-----BEGIN RSA PUBLIC KEY-----
+			MIIBCgKCAQEA61BjmfXGEvWmegnBGSuS+rU9soUg2FnODva32D1AqhwdziwHINFa
+			D1MVlcrYG6XRKfkcxnaXGfFDWHLEvNBSEVCgJjtHAGZIm5GL/KA86KDp/CwDFMSw
+			luowcXwDwoyinmeOY9eKyh6aY72xJh7noLBBq1N0bWi1e2i+83txOCg4yV2oVXhB
+			o8pYEJ8LT3el6Smxol3C1oFMVdwPgc0vTl25XucMcG/ALE/KNY6pqC2AQ6R2ERlV
+			gPiUWOPatVkt7+Bs3h5Ramxh7XjBOXeulmCpGSynXNcpZ/06+vofGi/2MlpQZNhH
+			Ao8eayMp6FcvNucIpUndo1X8dKMv3Y26ZQIDAQAB
+			-----END RSA PUBLIC KEY-----
+			"@
+
+			[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = ConvertFrom-PEM -PEM $PublicKey
+
+			Creates an RSA Public Key from the PEM file content.
+
+		.INPUTS
+			System.String
+
+		.OUTPUTS
+			System.Security.Cryptography.RSACryptoServiceProvider
+
+		.NOTES
+            AUTHOR: Michael Haken
+			LAST UPDATE: 1/23/2018
 	#>
 	[CmdletBinding()]
-	[OutputType([System.Byte[]], [System.Security.Cryptography.RSACryptoServiceProvider])]
+	[OutputType([System.Security.Cryptography.RSACryptoServiceProvider])]
 	Param(
 		[Parameter(Mandatory = $true, ValueFromPipeline = $true, ParameterSetName = "Content")]
 		[ValidateNotNullOrEmpty()]
@@ -261,12 +317,11 @@ Function ConvertFrom-PEM {
         # Remove all new line encoding
         $PEM = $PEM.Replace("\n", "").Replace("\r", "").Replace("`n", "").Replace("`r", "")
 
-        $Public = "(CERTIFICATE|PUBLIC KEY|RSA PUBLIC KEY)"
-        $Private = "(RSA PRIVATE KEY|PRIVATE KEY)"
+        $Public = "(PUBLIC KEY|RSA PUBLIC KEY)"
+        $Private = "(PRIVATE KEY|RSA PRIVATE KEY)"
 
         $Header = "-----BEGIN {0}-----"
 		$Footer = "-----END {0}-----"
-
 
         # These have 2 capture groups, the header key type and the body
         $PublicRegex = New-Object -TypeName System.Text.RegularExpressions.Regex("^$([System.String]::Format($Header, $Public))\s*(.*?)\s*$([System.String]::Format($Footer, $Public))$", [System.Text.RegularExpressions.RegexOptions]::Singleline)
@@ -347,7 +402,92 @@ Function ConvertFrom-PEM {
 }
 
 Function New-RSACryptoServiceProvider {
+	<#
+		.SYNOPSIS
+			Creates a new RSACryptoServiceProvider object from the specified parameters.
+		
+		.DESCRIPTION
+			This cmdlet wraps creating the RSAParameters object and importing those into the RSACryptoServiceProvider object.
+			The parameters are supplied as base64 encoded strings that were derived from byte arrays stored in 
+			big endian order. The parameters are trimmed down to the required lengths before being imported, so if
+			the parameters are stored in PEM format with leading padding bytes, they are automatically trimmed and
+			can be supplied as is.
+
+			This cmdlet is typically called by other cmdlets in the BAMCIS.Crypto module, but can be called directly
+			if you are manually parsing or creating RSACryptoServiceProviders from PEM or XML files.
+
+			If only a modulus and exponent are provided, a public key is produced, otherwise all RSAParameter inputs
+			are required to create an RSA private key.
+
+		.PARAMETER Modulus
+			The base64 encoded modulus for the RSA algorithm. This should be in big endian order and is expected to
+			be 256 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER Exponent
+			The base64 encoded exponent for the RSA algorithm. This should be in big endian order and is expected to
+			be 3 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER Version
+			The base64 encoded version of the RSA algorithm. This should be in big endian order and is expected to
+			be 4 bytes long, but will be trimmed or padded if it is shorter or longer. This parameter is optional
+			and is just displayed in verbose output.
+	
+		.PARAMETER D
+			The base64 encoded D parameter, private exponent, for the RSA algorithm. This should be in big endian order and is expected to
+			be 256 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER P
+			The base64 encoded P parameter, prime1, for the RSA algorithm. This should be in big endian order and is expected to
+			be 128 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER Q
+			The base64 encoded Q parameter, prime2, for the RSA algorithm. This should be in big endian order and is expected to
+			be 128 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER DP
+			The base64 encoded DP parameter, exponent1, for the RSA algorithm. This should be in big endian order and is expected to
+			be 128 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER DQ
+			The base64 encoded DQ parameter, exponent2, for the RSA algorithm. This should be in big endian order and is expected to
+			be 128 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.PARAMETER IQ
+			The base64 encoded IQ parameter, coefficient, for the RSA algorithm. This should be in big endian order and is expected to
+			be 128 bytes long, but will be trimmed or padded if it is shorter or longer.
+
+		.EXAMPLE
+			[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = New-RSACryptoServiceProvider -Modulus $Mod -Exponent $Ex
+
+			This creates an RSA public key with the base64 encoded modulus and exponent provided in the variables
+			$Mod and $Ex.
+
+		.EXAMPLE
+			[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = New-RSACryptoServiceProvider `
+				-Modulus $Mod `
+				-Exponent $Ex `
+				-D $D `
+				-P $P `
+				-Q $Q `
+				-DP $DP `
+				-DQ $DQ `
+				-IQ $IQ
+
+			Creates an RSA Private key with the RSA Parameters provided. These parameters could be extracted from an
+			XML file or decoded from a PEM ASN.1 data structure.
+
+		.INPUTS
+			None
+		
+		.OUTPUTS
+			System.Security.Cryptography.RSACryptoServiceProvider
+
+		.NOTES
+            AUTHOR: Michael Haken
+			LAST UPDATE: 1/23/2018
+	#>
 	[CmdletBinding(DefaultParameterSetName = "Public")]
+	[OutputType([System.Security.Cryptography.RSACryptoServiceProvider])]
 	Param(
 		[Parameter(Mandatory = $true)]
 		[ValidateNotNullOrEmpty()]
@@ -406,6 +546,9 @@ Function New-RSACryptoServiceProvider {
 
 			Write-Verbose -Message "Algorithm version: $VersionNumber."
 		}
+
+		# All of the RSAParameters are big-endian
+		# https://msdn.microsoft.com/en-us/library/ms867080.aspx
 
         # Length of 256
         [System.Byte[]]$ModulusBytes = [System.Convert]::FromBase64String($Modulus)
