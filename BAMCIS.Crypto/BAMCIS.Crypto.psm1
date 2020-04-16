@@ -4,82 +4,78 @@ $script:Footer = "-----END {0}-----"
 #region RSA
 
 Function ConvertFrom-RSAPrivateKeyPEM {
-	<#
-		.SYNOPSIS
-			Converts a PKCS#1 format PEM file to an RSACryptoServiceProvider object.
+<#
+    .SYNOPSIS
+	Converts a PKCS#1 format PEM file to an RSACryptoServiceProvider object.
 
-		.DESCRIPTION
-			This cmdlet takes a PKCS#1 formatted RSA private key and converts it to
-			an RSACryptoServiceProvider object.
+    .DESCRIPTION
+	This cmdlet takes a PKCS#1 formatted RSA private key and converts it to an RSACryptoServiceProvider object.
 
-		.PARAMETER PEM
-			The PEM content of the RSA Private Key. This can either be the complete PEM file contents
-			or just the base64 encoded data.
+    .PARAMETER PEM
+	The PEM content of the RSA Private Key. This can either be the complete PEM file contents or just the base64 encoded data.
 
-		.PARAMETER Path
-			The path to a properly encoded PEM file with the appropriate Header and Footer text.
+    .PARAMETER Path
+	The path to a properly encoded PEM file with the appropriate Header and Footer text.
 
-			The file can only contain a single key, subsequent keys in the same file will be ignored.
+	The file can only contain a single key, subsequent keys in the same file will be ignored.
 
-		.EXAMPLE
-			$Key = @"
-			-----BEGIN RSA PRIVATE KEY-----
-			<base64encodedkeydata>
-			-----END RSA PRIVATE KEY-----
-			"@
+    .EXAMPLE
+	$Key = @"
+	-----BEGIN RSA PRIVATE KEY-----
+	<base64encodedkeydata>
+	-----END RSA PRIVATE KEY-----
+	"@
 
-			$RSA = ConvertFrom-RSAPrivateKeyPEM -PEM $Key
+	$RSA = ConvertFrom-RSAPrivateKeyPEM -PEM $Key
 
-			This will convert the PEM file containing a private key to an RSACryptoServiceProvider object.
+        This will convert the PEM file containing a private key to an RSACryptoServiceProvider object.
 
-		.INPUTS
-			System.String
+    .INPUTS
+	System.String
 
-		.OUTPUTS
-			System.Security.Cryptography.RSACryptoServiceProvider
+    .OUTPUTS
+	System.Security.Cryptography.RSACryptoServiceProvider
 
-		.NOTES
-            AUTHOR: Michael Haken
-			LAST UPDATE: 1/26/2018
-	#>
-	[CmdletBinding()]
-	[OutputType([System.Security.Cryptography.RSACryptoServiceProvider])]
-	Param(
-		[Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true, ParameterSetName = "Content")]
-		[ValidateNotNullOrEmpty()]
-		[System.String]$PEM,
+    .NOTES
+        AUTHOR: Michael Haken
+	LAST UPDATE: 4/16/2020
+#>
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.RSACryptoServiceProvider])]
+    Param(
+	[Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true, ParameterSetName = "Content")]
+	[ValidateNotNullOrEmpty()]
+	[System.String]$PEM,
 
-		[Parameter(Mandatory = $true, ParameterSetName = "Path")]
-		[ValidateNotNullOrEmpty()]
-		[ValidateScript({
-			Test-Path -Path $_
-		})]
-		[System.String]$Path
-	)
+	[Parameter(Mandatory = $true, ParameterSetName = "Path")]
+	[ValidateNotNullOrEmpty()]
+	[ValidateScript({
+	    Test-Path -Path $_
+	})]
+	[System.String]$Path
+    )
 
-	Begin {
+    Begin {
+    }
 
-	}
-
-	Process {
-		if ($PSCmdlet.ParameterSetName -eq "Path")
-		{
+    Process {
+        if ($PSCmdlet.ParameterSetName -eq "Path")
+	{
             Write-Verbose -Message "Getting PEM data from $Path."
-
-			$PEM = Get-Content -Path $Path -Raw
-		}
+	    $PEM = Get-Content -Path $Path -Raw
+	}
 
         $PEM = $PEM.Replace("\r", "").Replace("\n", "").Replace("`r", "").Replace("`n", "")
 	
-		# If the PEM content doesn't have the header/footer info stripped, make
-		# sure it's the right type of key
+	# If the PEM content doesn't have the header/footer info stripped, make
+	# sure it's the right type of key
         if ($PEM.StartsWith("-----"))
         {
             $Header = [System.String]::Format($script:Header, "RSA PRIVATE KEY")
-		    $Footer = [System.String]::Format($script:Footer, "RSA PRIVATE KEY")
-		    $RegexStr = "(?:$Header)\s*(\S+)\s*(?:$Footer)"
+	    $Footer = [System.String]::Format($script:Footer, "RSA PRIVATE KEY")
+	    $RegexStr = "(?:$Header)\s*(\S+)\s*(?:$Footer)"
 
-		    $Regex = New-Object -TypeName System.Text.RegularExpressions.Regex($RegexStr, @([System.Text.RegularExpressions.RegexOptions]::IgnoreCase))
+	    $Regex = New-Object -TypeName System.Text.RegularExpressions.Regex($RegexStr, @([System.Text.RegularExpressions.RegexOptions]::IgnoreCase))
             [System.Text.RegularExpressions.Match]$DataMatch = $Regex.Match($PEM)
 
             if (-not $DataMatch.Success)
@@ -92,29 +88,27 @@ Function ConvertFrom-RSAPrivateKeyPEM {
             }
         }		
 
-		Write-Verbose -Message $PEM
+	Write-Verbose -Message $PEM
 
-		[System.Collections.Hashtable]$Result = Read-ASN1Content -Base64String $PEM
+	[System.Collections.Hashtable]$Result = Read-ASN1Content -Base64String $PEM
 
-		[System.Collections.Hashtable]$KeyParts = $Result["0"]["Data"]
+	[System.Collections.Hashtable]$KeyParts = $Result["0"]["Data"]
 
-        $KeyParts
-
-		[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = New-RSACryptoServiceProvider -Version $KeyParts["0"]["Data"] `
-			-Modulus $KeyParts["1"]["Data"] `
-			-Exponent $KeyParts["2"]["Data"] `
-			-D $KeyParts["3"]["Data"] `
-			-P $KeyParts["4"]["Data"] `
-			-Q $KeyParts["5"]["Data"] `
-			-DP $KeyParts["6"]["Data"] `
-			-DQ $KeyParts["7"]["Data"] `
-			-IQ $KeyParts["8"]["Data"]
+	[System.Security.Cryptography.RSACryptoServiceProvider]$RSA = New-RSACryptoServiceProvider -Version $KeyParts["0"]["Data"] `
+	    -Modulus $KeyParts["1"]["Data"] `
+	    -Exponent $KeyParts["2"]["Data"] `
+	    -D $KeyParts["3"]["Data"] `
+	    -P $KeyParts["4"]["Data"] `
+	    -Q $KeyParts["5"]["Data"] `
+	    -DP $KeyParts["6"]["Data"] `
+	    -DQ $KeyParts["7"]["Data"] `
+	    -IQ $KeyParts["8"]["Data"]
 
         Write-Output -InputObject $RSA
-	}
+    }
 
-	End {
-	}
+    End {
+    }
 }
 
 Function ConvertFrom-RSAPublicKeyPEM {
