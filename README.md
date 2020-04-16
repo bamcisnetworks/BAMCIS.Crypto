@@ -7,5 +7,8 @@ that can be used to sign data for JWTs.
 
 ## Revision History
 
+### 1.0.1
+Bug fix in `ConvertFrom-RSAPrivateKeyPEM`.
+
 ### 1.0.0.0
 Initial Release.
